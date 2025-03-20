@@ -8,14 +8,18 @@ This application extracts news articles related to a given company, performs sen
    ```bash
    git clone https://github.com/rizz045/news-sentiment-app.git
 
-2. Install Dependencies:
+2. Locate the cloned directory:
+   ```bash
+   cd /c/your_location_address
+
+3. Install Dependencies:
     ```bash
     pip install -r requirements.txt
 
-3. Run the backend API:
+4. Run the backend API:
     ```bash
     uvicorn api:app --reload
 
-4. Run the Streamlit frontend:
+5. Run the Streamlit frontend:
     ```bash
     streamlit run app.py
