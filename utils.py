@@ -7,9 +7,12 @@ from collections import defaultdict
 import spacy
 import re
 
+import requests
+
 def fetch_news_articles(company_name, api_key):
     """
     Fetch news articles related to the company using NewsAPI.
+    Automatically fetches up to 10 articles, but adjusts to the actual number available.
     
     :param company_name: Name of the company to search for.
     :param api_key: Your NewsAPI API key.
@@ -24,7 +27,7 @@ def fetch_news_articles(company_name, api_key):
         "apiKey": api_key,  # Your API key
         "language": "en",   # Language of the articles
         "sortBy": "publishedAt",  # Sort by publication date
-        "pageSize": 10  # Number of articles to fetch
+        "pageSize": 10  # Fetch up to 10 articles
     }
     
     try:
@@ -127,35 +130,35 @@ def identify_company(news_data):
     "Intel",
     "IBM",
     "NVIDIA",
-    "Tata Group",
-    "Reliance Industries",
+    "Tata",
+    "Reliance",
     "Infosys",
     "Wipro",
-    "HCL Technologies",
-    "Adani Group",
+    "HCL",
+    "Adani",
     "Larsen And Toubro",
     "Mahindra",
     "Hindustan Unilever",
     "Flipkart",
-    "BYJU'S",
-    "Ola Cabs",
+    "BYJUS",
+    "Ola",
     "Paytm",
     "Berkshire Hathaway",
     "JPMorgan Chase",
     "Goldman Sachs",
     "Visa",
     "Mastercard",
-    "Coca-Cola",
+    "CocaCola",
     "PepsiCo",
     "McDonald's",
     "Starbucks",
-    "Nestlé",
+    "Nestle",
     "Unilever",
     "Nike",
     "Adidas",
     "Zara",
-    "Louis Vuitton (LVMH)",
-    "Mercedes-Benz",
+    "Louis Vuitton",
+    "Mercedes Benz",
     "BMW",
     "Toyota",
     "Ford",
@@ -169,7 +172,7 @@ def identify_company(news_data):
 ]
     for article in news_data:
         text = article["title"] + " " + article["summary"]
-        for keyword in company_keywords:
+        for keyword in company_keywords.lower():
             if keyword in text.lower():
                 return keyword.capitalize()
     return "Unknown Company"
