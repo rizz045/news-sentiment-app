@@ -6,38 +6,37 @@ import os
 from collections import defaultdict
 import spacy
 import re
-
 import requests
+
 
 def fetch_news_articles(company_name, api_key):
     """
     Fetch news articles related to the company using NewsAPI.
-    Automatically fetches up to 10 articles, but adjusts to the actual number available.
-    
+
     :param company_name: Name of the company to search for.
     :param api_key: Your NewsAPI API key.
     :return: List of news articles.
     """
     # NewsAPI endpoint for fetching everything
     url = "https://newsapi.org/v2/everything"
-    
+
     # Parameters for the API request
     params = {
         "q": company_name,  # Search query
         "apiKey": api_key,  # Your API key
         "language": "en",   # Language of the articles
         "sortBy": "publishedAt",  # Sort by publication date
-        "pageSize": 10  # Fetch up to 10 articles
+        "pageSize": 10  # Number of articles to fetch
     }
-    
+
     try:
         # Make the API request
         response = requests.get(url, params=params)
         response.raise_for_status()  # Raise an error for bad status codes
-        
+
         # Parse the JSON response
         data = response.json()
-        
+        # print(data)
         # Extract relevant information from the response
         articles = []
         for article in data.get("articles", []):
@@ -46,12 +45,30 @@ def fetch_news_articles(company_name, api_key):
                 "summary": article.get("description", "No summary"),
                 "url": article.get("url", "#")
             })
-        
+
         return articles
-    
+
     except requests.exceptions.RequestException as e:
         print(f"Error fetching news articles: {e}")
         return []
+
+
+from textblob import TextBlob
+
+def analyze_sentiment(text):
+    if not text or text.strip() == "":  # Check if text is empty or only spaces
+        return "Neutral"
+
+    analysis = TextBlob(text)
+    polarity = analysis.sentiment.polarity
+
+    if polarity > 0:
+        return "Positive"
+    elif polarity < 0:
+        return "Negative"
+    else:
+        return "Neutral"
+
 
 def generate_tts(articles, company_name):
     """
@@ -60,14 +77,11 @@ def generate_tts(articles, company_name):
     summary = f"{company_name} के समाचार कवरेज का विश्लेषण:\n"
     for i, article in enumerate(articles):
         summary += f"लेख {i + 1}: {article['title']}\n"
-    
+
     tts = gTTS(summary, lang='hi')
     tts_file = f"{company_name}_summary.mp3"
     tts.save(tts_file)
     return tts_file
-
-
-
 
 
 def analyze_sentiment(text):
@@ -84,13 +98,13 @@ def analyze_sentiment(text):
         return "Neutral"
 
 
-# Load the spaCy model (install it first: pip install spacy && python -m spacy download en_core_web_sm)
-nlp = spacy.load("en_core_web_sm")
-
 def extract_topics(text, company):
     """
     Extract topics dynamically using NLP (Named Entity Recognition and POS tagging).
     """
+    # Load the spaCy model (install it first: pip install spacy && python -m spacy download en_core_web_sm)
+    nlp = spacy.load("en_core_web_sm")
+
     topics = set()  # Use a set to avoid duplicates
     doc = nlp(text)
 
@@ -105,7 +119,7 @@ def extract_topics(text, company):
             topics.add(chunk.text)
 
     # Add the company name as a topic
-    topics.add(company)
+    # topics.add(company)
 
     # Filter out generic words (optional)
     generic_words = {"company", "news", "article", "report", "year", "time", "day"}
@@ -113,71 +127,9 @@ def extract_topics(text, company):
 
     return list(topics)
 
-def identify_company(news_data):
-    """
-    Identify the company name from the news data.
-    """
-    # company_keywords = ["tesla", "apple", "microsoft", "google", "amazon", "meta", "nvidia"]
-    company_keywords = [
-    "Apple",
-    "Microsoft",
-    "Google",
-    "Amazon",
-    "Meta",
-    "Tesla",
-    "Samsung",
-    "Sony",
-    "Intel",
-    "IBM",
-    "NVIDIA",
-    "Tata",
-    "Reliance",
-    "Infosys",
-    "Wipro",
-    "HCL",
-    "Adani",
-    "Larsen And Toubro",
-    "Mahindra",
-    "Hindustan Unilever",
-    "Flipkart",
-    "BYJUS",
-    "Ola",
-    "Paytm",
-    "Berkshire Hathaway",
-    "JPMorgan Chase",
-    "Goldman Sachs",
-    "Visa",
-    "Mastercard",
-    "CocaCola",
-    "PepsiCo",
-    "McDonald's",
-    "Starbucks",
-    "Nestle",
-    "Unilever",
-    "Nike",
-    "Adidas",
-    "Zara",
-    "Louis Vuitton",
-    "Mercedes Benz",
-    "BMW",
-    "Toyota",
-    "Ford",
-    "Hyundai",
-    "Netflix",
-    "Disney",
-    "YouTube",
-    "WhatsApp",
-    "Adobe",
-    "Oracle"
-]
-    for article in news_data:
-        text = article["title"] + " " + article["summary"]
-        for keyword in company_keywords.lower():
-            if keyword in text.lower():
-                return keyword.capitalize()
-    return "Unknown Company"
+###
 
-def generate_report(news_data):
+def generate_report(news_data, company_name):
     """
     Generate a structured report from the provided news data.
     """
@@ -185,7 +137,8 @@ def generate_report(news_data):
         return {"error": "No news data provided."}
 
     # Identify the company dynamically
-    company = identify_company(news_data)
+    # company = identify_company(news_data)
+    company = company_name
     articles = []
     sentiment_distribution = defaultdict(int)
     all_topics = defaultdict(int)
@@ -249,7 +202,7 @@ def generate_report(news_data):
 
     # Construct the final report
     report = {
-        "Company": company,
+        "Company": company_name,
         "Articles": articles,
         "Comparative Sentiment Score": comparative_sentiment_score,
         "Final Sentiment Analysis": final_sentiment_analysis,
