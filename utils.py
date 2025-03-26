@@ -72,13 +72,20 @@ def analyze_sentiment(text):
 
 def generate_tts(articles, company_name):
     """
-    Generate Hindi TTS for the summarized content.
+    Generate Hindi TTS that includes both titles and summaries
     """
-    summary = f"{company_name} के समाचार कवरेज का विश्लेषण:\n"
+    summary = f"{company_name} के समाचार कवरेज का विश्लेषण:\n\n"
+    
     for i, article in enumerate(articles):
-        summary += f"लेख {i + 1}: {article['title']}\n"
-
-    tts = gTTS(summary, lang='hi')
+        # Get title (handling both 'Title' and 'title' keys)
+        title = article.get('Title') or article.get('title', 'No title')
+        # Get summary (handling both 'Summary' and 'summary' keys)
+        article_summary = article.get('Summary') or article.get('summary', 'No summary available')
+        
+        summary += f"लेख {i + 1}: {title}\n"
+        summary += f"सारांश: {article_summary}\n\n"
+    
+    tts = gTTS(text=summary, lang='hi', slow=False)
     tts_file = f"{company_name}_summary.mp3"
     tts.save(tts_file)
     return tts_file
@@ -130,14 +137,9 @@ def extract_topics(text, company):
 ###
 
 def generate_report(news_data, company_name):
-    """
-    Generate a structured report from the provided news data.
-    """
     if not news_data:
         return {"error": "No news data provided."}
 
-    # Identify the company dynamically
-    # company = identify_company(news_data)
     company = company_name
     articles = []
     sentiment_distribution = defaultdict(int)
@@ -145,68 +147,67 @@ def generate_report(news_data, company_name):
     unique_topics_per_article = []
 
     for article in news_data:
-        title = article["title"]
-        summary = article["summary"]
+        title = article.get("title", "No title")
+        summary = article.get("summary", "No summary")
+        url = article.get("url", "#")  # URL with fallback
         sentiment = analyze_sentiment(summary)
-        topics = extract_topics(summary, company)  # Use the new extract_topics function
+        topics = extract_topics(summary, company) or ["General news"]  # Fallback for empty topics
 
-        # Update sentiment distribution
         sentiment_distribution[sentiment] += 1
 
-        # Update topic frequency
-        for topic in topics:
-            all_topics[topic] += 1
-
-        # Store article details
         articles.append({
-            "Title": title,
+            "title": title,  # Lowercase key
+            "Title": title,  # Keep both for compatibility
+            "summary": summary,
             "Summary": summary,
             "Sentiment": sentiment,
-            "Topics": topics
+            "Topics": topics,
+            "url": url
         })
-
-        # Store unique topics per article
         unique_topics_per_article.append(set(topics))
 
-    # Find common and unique topics
-    common_topics = set.intersection(*unique_topics_per_article) if unique_topics_per_article else set()
-    unique_topics = []
-    for i, topics in enumerate(unique_topics_per_article):
-        unique_topics.append({
-            f"Unique topics in Article {i + 1}": list(topics - common_topics)
-        })
-
-    # Generate comparative sentiment analysis
-    comparative_sentiment_score = {
+    # Generate comparative analysis
+    comparative_score = {
         "Sentiment Distribution": dict(sentiment_distribution),
-        "Coverage Differences": [],
-        "Topic Overlap": {
-            "Common Topics": list(common_topics),
-            "Unique Topics": unique_topics
-        }
+        "Coverage Differences": generate_coverage_differences(articles),
+        "Topic Overlap": generate_topic_analysis(unique_topics_per_article)
     }
 
-    # Add comparisons and impacts if there are at least 2 articles
-    if len(articles) >= 2:
-        for i in range(len(articles) - 1):
-            comparison = f"Article {i+1} highlights {articles[i]['Topics'][0] if articles[i]['Topics'] else 'general news'}, while Article {i+2} discusses {articles[i+1]['Topics'][0] if articles[i+1]['Topics'] else 'general news'}."
-            impact = f"The first article may influence {articles[i]['Sentiment']} sentiment, while the second raises {articles[i+1]['Sentiment']} concerns."
-            comparative_sentiment_score["Coverage Differences"].append({
-                "Comparison": comparison,
-                "Impact": impact
-            })
+    # Generate final conclusion
+    conclusion = generate_conclusion(company, sentiment_distribution)
 
-    # Final sentiment analysis
-    final_sentiment = "Positive" if sentiment_distribution["Positive"] > sentiment_distribution["Negative"] else "Negative"
-    final_sentiment_analysis = f"{company}'s latest news coverage is mostly {final_sentiment}. Potential stock growth expected."
-
-    # Construct the final report
-    report = {
-        "Company": company_name,
+    return {
+        "Company": company,
         "Articles": articles,
-        "Comparative Sentiment Score": comparative_sentiment_score,
-        "Final Sentiment Analysis": final_sentiment_analysis,
-        "Audio": "[Play Hindi Speech]"
+        "Comparative Sentiment Score": comparative_score,
+        "Final Sentiment Analysis": conclusion,
+        "Audio": f"{company_name}_summary.mp3"
     }
 
-    return report
+# New helper functions
+def generate_coverage_differences(articles):
+    differences = []
+    for i in range(len(articles)-1):
+        art1 = articles[i]
+        art2 = articles[i+1]
+        comparison = (f"Article {i+1} focuses on {art1['Topics'][0] if art1['Topics'] else 'general topics'}, "
+                    f"while Article {i+2} discusses {art2['Topics'][0] if art2['Topics'] else 'different topics'}.")
+        impact = f"Sentiment shifts from {art1['Sentiment']} to {art2['Sentiment']}."
+        differences.append({"Comparison": comparison, "Impact": impact})
+    return differences
+
+def generate_topic_analysis(unique_topics):
+    common = set.intersection(*unique_topics) if unique_topics else set()
+    unique = [{"Article "+str(i+1): list(t-set(common))} 
+             for i,t in enumerate(unique_topics)]
+    return {"Common Topics": list(common), "Unique Topics": unique}
+
+def generate_conclusion(company, sentiment_dist):
+    pos = sentiment_dist.get("Positive", 0)
+    neg = sentiment_dist.get("Negative", 0)
+    
+    if pos > neg:
+        return f"{company}'s news is mostly positive ({pos} vs {neg} negative). Potential stock growth."
+    elif neg > pos:
+        return f"{company}'s news is mostly negative ({neg} vs {pos} positive). Potential stock decline."
+    return f"{company} has balanced coverage ({pos} positive, {neg} negative). Stock may remain stable."
