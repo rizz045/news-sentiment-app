@@ -1,114 +1,162 @@
-# app.py - Streamlit App for Company News Sentiment Analysis
 import streamlit as st
 from utils import fetch_news_articles, generate_report, generate_tts
 import os
-import base64
+import matplotlib.pyplot as plt
 
 def main():
+    st.set_page_config(page_title="News Sentiment Analyzer", layout="wide")
     st.title("📰 Company News Sentiment Analyzer")
-    st.markdown("Analyze news sentiment and get a Hindi audio summary for any company.")
     
-    # Input section with improved UI
-    col1, col2 = st.columns(2)
-    with col1:
+    # Input section
+    with st.form(key="analysis_form"):
         company_name = st.text_input("Enter company name:", placeholder="Tesla, Apple, etc.")
-    with col2:
-        # Use Streamlit Secrets if available, otherwise ask for input
+        
         if 'NEWSAPI_KEY' in st.secrets:
             api_key = st.secrets['NEWSAPI_KEY']
             st.info("Using secured NewsAPI key")
         else:
-            api_key = st.text_input("Enter NewsAPI key:", type="password", 
-                                  help="Get a free key from newsapi.org")
+            api_key = st.text_input("Enter NewsAPI key:", type="password")
+        
+        submitted = st.form_submit_button("🚀 Analyze News", type="primary")
     
-    if st.button("🚀 Analyze News", type="primary"):
+    if submitted:
         if not company_name:
             st.warning("Please enter a company name")
             return
             
         if not api_key:
-            st.error("API key is required. Get one from newsapi.org")
+            st.error("API key is required")
             return
             
         with st.spinner("🔍 Fetching and analyzing news..."):
             try:
-                # Fetch news articles
                 news_data = fetch_news_articles(company_name, api_key)
-                
                 if not news_data:
-                    st.error(f"No news found for {company_name}. Try a different company.")
+                    st.error("No news found. Try a different company.")
                     return
                 
-                # Generate report
                 report = generate_report(news_data, company_name)
                 
-                # Display results in expandable sections
-                st.header(f"📊 Analysis for {company_name}")
+                # 1. Overall Summary
+                with st.expander("📊 Overall Summary", expanded=True):
+                    cols = st.columns(3)
+                    sentiment_dist = report['Comparative Sentiment Score']['Sentiment Distribution']
+                    cols[0].metric("Positive", sentiment_dist['Positive'])
+                    cols[1].metric("Negative", sentiment_dist['Negative'])
+                    cols[2].metric("Neutral", sentiment_dist['Neutral'])
+                    
+                    sentiment = report['Final Sentiment Analysis']
+                    if "Positive" in sentiment:
+                        st.success(sentiment)
+                    elif "Negative" in sentiment:
+                        st.error(sentiment)
+                    else:
+                        st.warning(sentiment)
                 
-                # 1. News Articles Section
-                with st.expander("📰 News Articles", expanded=True):
-                    for i, article in enumerate(report["Articles"]):
-                        st.subheader(f"Article {i+1}: {article['Title']}")
+                # 2. Articles Display
+                st.header("📰 News Articles")
+                for i, article in enumerate(report["Articles"]):
+                    with st.expander(f"Article {i+1}: {article['Title']}"):
                         st.caption(f"Sentiment: {article['Sentiment']}")
                         st.write(article["Summary"])
-                        st.markdown(f"**Topics:** {', '.join(article['Topics'])}")
-                        st.markdown(f"[Read more]({article.get('url', '#')})")
+                        
+                        if article.get('url') and article['url'] not in ["", "#"]:
+                            st.markdown(f"**Read full article:** [Link]({article['url']})")
+                        else:
+                            st.warning("Original article URL not available")
+                        
+                        st.markdown("**Topics:** " + ", ".join(article['Topics']))
+                
+                # 3. Comparative Analysis
+                with st.expander("🔍 Comparative Analysis"):
+                    # Sentiment Charts
+                    fig, ax = plt.subplots(1, 2, figsize=(10,4))
+                    
+                    # Bar chart
+                    ax[0].bar(
+                        report['Comparative Sentiment Score']['Sentiment Distribution'].keys(),
+                        report['Comparative Sentiment Score']['Sentiment Distribution'].values(),
+                        color=['green', 'red', 'orange']
+                    )
+                    ax[0].set_title("Sentiment Distribution")
+                    
+                    # Pie chart
+                    ax[1].pie(
+                        report['Comparative Sentiment Score']['Sentiment Distribution'].values(),
+                        labels=report['Comparative Sentiment Score']['Sentiment Distribution'].keys(),
+                        autopct='%1.1f%%',
+                        colors=['green', 'red', 'orange']
+                    )
+                    ax[1].set_title("Sentiment Ratio")
+                    st.pyplot(fig)
+                    
+                    # Coverage Differences
+                    st.subheader("Coverage Differences")
+                    for diff in report['Comparative Sentiment Score']['Coverage Differences']:
+                        col1, col2 = st.columns([3,1])
+                        col1.write(f"**Comparison:** {diff['Comparison']}")
+                        col2.write(f"**Impact:** {diff['Impact']}")
                         st.divider()
-                
-                # 2. Sentiment Visualization
-                with st.expander("📈 Sentiment Analysis", expanded=True):
-                    sentiment_data = report["Comparative Sentiment Score"]["Sentiment Distribution"]
-                    st.bar_chart(sentiment_data)
                     
-                    # Add pie chart for better visualization
-                    if sum(sentiment_data.values()) > 0:
-                        st.write("### Sentiment Distribution")
-                        st.pie_chart(sentiment_data)
-                
-                # 3. Overall Analysis
-                with st.expander("🔍 Overall Insights", expanded=True):
-                    st.write(report["Final Sentiment Analysis"])
+                    # Topic Analysis
+                    st.subheader("Topic Analysis")
+                    st.write("**Common Topics:** " + 
+                            ", ".join(report['Comparative Sentiment Score']['Topic Overlap']['Common Topics']))
                     
-                    # Show topic overlap if available
-                    if "Topic Overlap" in report["Comparative Sentiment Score"]:
-                        st.write("### Common Topics Across Articles")
-                        st.write(", ".join(report["Comparative Sentiment Score"]["Topic Overlap"]["Common Topics"]))
+                    st.write("**Unique Topics:**")
+                    for unique in report['Comparative Sentiment Score']['Topic Overlap']['Unique Topics']:
+                        for art, topics in unique.items():
+                            st.write(f"- {art}: {', '.join(topics)}")
                 
-                # 4. Hindi Audio Summary
-                with st.expander("🎧 Hindi Audio Summary", expanded=True):
-                    try:
-                        audio_file = generate_tts(news_data, company_name)
-                        with open(audio_file, "rb") as f:
-                            audio_bytes = f.read()
-                        
-                        st.audio(audio_bytes, format="audio/mp3")
-                        
-                        # Download button with custom styling
-                        st.download_button(
-                            label="⬇️ Download Hindi Summary",
-                            data=audio_bytes,
-                            file_name=f"{company_name}_hindi_summary.mp3",
-                            mime="audio/mp3",
-                            use_container_width=True
-                        )
-                        
-                        # Clean up the audio file
-                        os.remove(audio_file)
-                    except Exception as e:
-                        st.error(f"Failed to generate audio: {str(e)}")
+                # 4. Audio Summary
+                if report.get('Audio'):
+                    with st.expander("🎧 Hindi Audio Summary", expanded=False):
+                        try:
+                            if not os.path.exists(report['Audio']):
+                                # Prepare articles data with consistent structure
+                                audio_articles = [
+                                    {
+                                        'Title': article['Title'],
+                                       'Summary': article['Summary'][:300] + "..." if len(article['Summary']) > 300 else article['Summary']
+                                    } 
+                                    for article in report['Articles']
+                                ]
+
+                               # Generate new audio file with both titles and summaries
+                                audio_file = generate_tts(audio_articles, report['Company'])
+                                report['Audio'] = audio_file  # Update report with new file path
+
+                            if os.path.exists(report['Audio']):
+                                # Display audio player
+                                st.audio(report['Audio'], format='audio/mp3')
+
+                                # Add download button
+                                with open(report['Audio'], "rb") as f:
+                                    st.download_button(
+                                        label="⬇️ Download Full Summary (Hindi)",
+                                        data=f,
+                                        file_name=f"{report['Company']}_news_summary.mp3",
+                                        mime="audio/mp3",
+                                        help="Download the Hindi audio summary of all articles"
+                                    )
+
+                                # Display what's included in the audio
+                                st.caption("This audio summary includes:")
+                                st.markdown("""
+                                - Company name introduction
+                                - All article titles
+                                - Summarized content for each article
+                                """)
+
+                            else:
+                                st.warning("Audio file could not be generated. Please try again.")
+
+                        except Exception as e:
+                            st.error(f"Failed to generate audio summary: {str(e)}")
+                            st.error("Please check your internet connection and try again.")
                 
             except Exception as e:
-                st.error(f"❌ An error occurred: {str(e)}")
-                st.error("Please check your API key and try again.")
-
-    # Add footer with instructions
-    st.divider()
-    st.markdown("""
-    ### How to use:
-    1. Enter a company name (e.g., Tesla, Apple)
-    2. Provide your [NewsAPI](https://newsapi.org) key
-    3. Click "Analyze News" to get results
-    """)
+                st.error(f"Analysis failed: {str(e)}")
 
 if __name__ == "__main__":
     main()
